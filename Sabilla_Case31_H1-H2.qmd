@@ -39,7 +39,11 @@ library(dplyr)
 library(ggplot2)
 library(knitr)
 
-efcu <- zap_labels(read_sav("case31_efcu_4.sav"))
+# works with either the renamed file or the original Canvas download
+data_file <- c("case31_efcu_4.sav", "Case 31 Data_efcu_4.sav",
+               "Case_31_Data_efcu_4.sav")
+data_file <- data_file[file.exists(data_file)][1]
+efcu <- zap_labels(read_sav(data_file))
 cat("Respondents:", nrow(efcu))
 ```
 
@@ -232,5 +236,5 @@ t.test(6 - h2$Q8_r, h2$q30, paired = TRUE)
 
 ## Appendix
 
-- **GitHub Repo:** <https://github.com/rsabilla/REPO-NAME>
-- **GitHub Pages:** <https://rsabilla.github.io/REPO-NAME/>
+- **GitHub Repo:** <https://github.com/rsabilla/IC-Case-31--Summary-of-Data-Analysis-for-H1-H2>
+- **GitHub Pages:** <https://rsabilla.github.io/IC-Case-31--Summary-of-Data-Analysis-for-H1-H2/>
