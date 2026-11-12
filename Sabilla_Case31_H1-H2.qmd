@@ -1,0 +1,236 @@
+---
+title: "IC Case 31: Summary of Data Analysis for H1 and H2"
+subtitle: "Employees Federal Credit Union (EFCU)"
+author: "Ron Sabilla"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    number-sections: true
+    theme: cosmo
+    embed-resources: true
+    code-fold: show
+    code-tools: true
+execute:
+  warning: false
+  message: false
+---
+
+## Overview
+
+This report covers the first two hypotheses for Case 31:
+
+| | Hypothesis | Variables | Test |
+|---|---|---|---|
+| **H1** | Members' awareness of the regular share account will influence their opinion on how well CU's financial services meet members' needs. | Q13r (IV, 3 groups) → Q33 (DV) | One-way ANOVA |
+| **H2** | Members will not differ in their opinion on CU's loan rate (Q8r) and how much they agree that CU's loan rate is lower than competitors' (Q30). | Q8r vs. Q30 (same respondents) | Paired samples t-test |
+
+**Why these tests?**
+
+- **H1:** The IV (awareness) is a categorical variable with **three groups**, and the DV (Q33) is a 5-point interval scale. Comparing the means of 3+ independent groups calls for a **one-way ANOVA**. Running multiple t-tests instead would inflate the Type I error rate.
+- **H2:** Both Q8r and Q30 are interval scales answered by the **same members**, so the two scores aren't independent. A **paired samples t-test** compares each member's two answers against each other.
+
+```{r}
+#| label: setup
+library(haven)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+
+efcu <- zap_labels(read_sav("case31_efcu_4.sav"))
+cat("Respondents:", nrow(efcu))
+```
+
+## H1: Awareness of Regular Share Account → Services Meet Members' Needs
+
+**Variables**
+
+- **Q13r (IV):** awareness of the regular share account, recoded so higher = more involvement: 1 = Unaware, 2 = Aware but have not used, 3 = Aware and have used
+- **Q33 (DV):** "CU's financial services meet the needs of members" (1 = Strongly Disagree to 5 = Strongly Agree)
+
+```{r}
+#| label: h1-prep
+efcu <- efcu |>
+  mutate(awareness = factor(q13_r, levels = 1:3,
+                            labels = c("Unaware",
+                                       "Aware, not used",
+                                       "Aware & used")))
+```
+
+### H1: Descriptive Statistics
+
+```{r}
+#| label: tbl-h1-desc
+#| tbl-cap: "Q33 (services meet members' needs) by awareness of the regular share account"
+h1_desc <- efcu |>
+  group_by(awareness) |>
+  summarise(n = n(),
+            Mean = round(mean(q33), 2),
+            SD = round(sd(q33), 2),
+            `% Agree (4–5)` = round(100 * mean(q33 >= 4), 1),
+            `% Disagree (1–2)` = round(100 * mean(q33 <= 2), 1))
+kable(h1_desc)
+```
+
+```{r}
+#| label: fig-h1-means
+#| fig-cap: "Mean agreement that CU's services meet members' needs, by awareness group (error bars = ±1 SE)"
+#| fig-width: 7
+#| fig-height: 4
+efcu |>
+  group_by(awareness) |>
+  summarise(mean = mean(q33), se = sd(q33) / sqrt(n())) |>
+  ggplot(aes(x = awareness, y = mean)) +
+  geom_col(fill = "#2c7fb8", width = 0.6) +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.15) +
+  geom_text(aes(label = round(mean, 2)), vjust = -1.2) +
+  coord_cartesian(ylim = c(1, 5)) +
+  labs(x = "Awareness of regular share account",
+       y = "Mean Q33 (1–5)") +
+  theme_minimal()
+```
+
+Looking at @tbl-h1-desc and @fig-h1-means first:
+
+- Most of the sample (83 of 128) says they're **unaware** of the regular share account. Only 13 members say they've actually used it, so that group is small.
+- Members who are **unaware** (3.63) or **aware but haven't used it** (3.72) both lean slightly toward agreeing that CU meets members' needs. More than half of each group agrees.
+- Members who have **actually used** the account are noticeably less positive (3.08). Only about 31% of them agree, and 23% disagree, the highest disagreement of any group.
+
+My read: the people with the most hands-on experience with CU's basic account are the least convinced that CU's services meet their needs.
+
+### H1: One-way ANOVA
+
+```{r}
+#| label: h1-assumption
+# Homogeneity of variance
+bartlett.test(q33 ~ awareness, data = efcu)
+```
+
+```{r}
+#| label: h1-anova
+h1_aov <- aov(q33 ~ awareness, data = efcu)
+summary(h1_aov)
+
+# Effect size (eta squared)
+ss <- summary(h1_aov)[[1]][["Sum Sq"]]
+cat("Eta squared =", round(ss[1] / sum(ss), 3))
+```
+
+```{r}
+#| label: h1-posthoc
+TukeyHSD(h1_aov)
+```
+
+```{r}
+#| label: h1-welch
+# Robustness check given unequal group sizes
+oneway.test(q33 ~ awareness, data = efcu)
+```
+
+The variances are similar across groups (Bartlett's K² = 0.61, p = .74), so a standard ANOVA is appropriate.
+
+### H1: Insight
+
+**H1 is supported. Awareness of the regular share account does influence how members feel about CU meeting their needs, but not in the direction you'd probably expect.** Members who have actually used the account rate CU lower on meeting their needs (M = 3.08) than both members who are unaware of it (M = 3.63) and members who know about it but haven't used it (M = 3.72) (*F*(2, 125) = 4.63, *p* = .012, η² = .07). The Tukey post-hoc tests confirm the "used" group is the one that differs (vs. unaware: *p* = .017; vs. aware-not-used: *p* = .011), while unaware and aware-not-used members aren't different from each other (*p* = .78). The result holds even with Welch's correction for the unequal group sizes (*p* = .039).
+
+**What this means for EFCU:** Simply making members aware of the share account doesn't hurt or help. But the experience of *using* it seems to leave members feeling their needs aren't fully met. That points to a product or service issue with the account itself (rates, features, convenience) rather than a communication problem. EFCU should talk to current users about what's missing before putting more effort into promoting it.
+
+**Caveat:** Only 13 members are in the "aware and used" group, so this finding should be confirmed with a larger sample. It's also unusual that 65% of credit union members say they're unaware of the regular share account, since it's usually a basic part of membership. Some members may have misread the question.
+
+## H2: Opinion on CU's Loan Rate (Q8r) vs. Agreement That CU's Rate Is Lower (Q30)
+
+**Variables**
+
+- **Q8r:** "Opinion about rates charged on borrowed funds," recoded to 1 = Very Low to 5 = Very High. "No opinion" (21 members) is set to missing.
+- **Q30:** "CU loan rates lower than others" (1 = Strongly Disagree to 5 = Strongly Agree)
+
+```{r}
+#| label: h2-prep
+h2 <- efcu |>
+  select(Q8_r, q30) |>
+  filter(!is.na(Q8_r), !is.na(q30))
+cat("Members with both answers:", nrow(h2))
+```
+
+### H2: Descriptive Statistics
+
+```{r}
+#| label: tbl-h2-desc
+#| tbl-cap: "Descriptive statistics for Q8r and Q30 (paired sample, n = 107)"
+h2_desc <- data.frame(
+  Item = c("Q8r: Opinion on CU loan rate (1 = very low, 5 = very high)",
+           "Q30: CU loan rates lower than others (1 = SD, 5 = SA)"),
+  Mean = round(c(mean(h2$Q8_r), mean(h2$q30)), 2),
+  SD   = round(c(sd(h2$Q8_r), sd(h2$q30)), 2),
+  `% at midpoint (3)` = round(100 * c(mean(h2$Q8_r == 3), mean(h2$q30 == 3)), 1),
+  check.names = FALSE
+)
+kable(h2_desc)
+```
+
+```{r}
+#| label: fig-h2-dist
+#| fig-cap: "Response distributions for Q8r and Q30 (n = 107)"
+#| fig-width: 8
+#| fig-height: 4
+h2 |>
+  tidyr::pivot_longer(everything(), names_to = "item", values_to = "score") |>
+  mutate(item = recode(item,
+                       Q8_r = "Q8r: Opinion on CU loan rate",
+                       q30  = "Q30: CU rates lower than others")) |>
+  count(item, score) |>
+  group_by(item) |>
+  mutate(pct = 100 * n / sum(n)) |>
+  ggplot(aes(x = factor(score), y = pct, fill = item)) +
+  geom_col(position = "dodge") +
+  labs(x = "Response (1–5)", y = "Percent of members", fill = NULL) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+From @tbl-h2-desc and @fig-h2-dist:
+
+- Both items sit right at the middle of the scale. Q8r averages 3.14 ("average" rate) and Q30 averages 3.06 ("uncertain").
+- More than half of members picked the midpoint on Q8r (55%), and about 41% did on Q30. Members don't have a strong opinion on CU's loan rates either way.
+- Another 21 members (16% of the sample) chose "No opinion" on Q8. That's another sign many members don't really know how CU's loan rates compare.
+
+### H2: Paired Samples t-test
+
+```{r}
+#| label: h2-ttest
+h2_t <- t.test(h2$Q8_r, h2$q30, paired = TRUE)
+h2_t
+
+# Effect size (Cohen's d for paired samples)
+diffs <- h2$Q8_r - h2$q30
+cat("Cohen's d =", round(mean(diffs) / sd(diffs), 3))
+```
+
+### H2: Insight
+
+**H2 is supported. Members' opinion of CU's loan rate and their agreement that CU's rate is lower than competitors' are essentially the same, and both are neutral** (Q8r M = 3.14 vs. Q30 M = 3.06; *t*(106) = 0.60, *p* = .55, *d* = 0.06). The average difference is less than a tenth of a scale point.
+
+**What this means for EFCU:** The real story isn't the "no difference" result. It's that members are **unsure about CU's loan rates in general**. Most picked "average" or "uncertain," and 1 in 6 had no opinion at all. For a credit union, competitive loan rates should be a key selling point, but members aren't seeing it. EFCU has an opportunity to clearly communicate how its loan rates compare to banks and other lenders (for example, side-by-side rate comparisons in statements, on the website, or at the branch).
+
+**A note on scale direction:** The two items point in opposite directions. A *high* Q8r means members think the rate is high (unfavorable), while a *high* Q30 means they agree the rate is lower (favorable). The negative correlation between them (*r* = –.49) confirms this. I ran the test as specified in the data analysis table. But if Q8r is flipped so both items point the same way (higher = more favorable view of rates), the difference becomes small but significant (*t*(106) = –2.35, *p* = .02), with members slightly *less* favorable when rating the rate directly (M = 2.86) than when comparing it to competitors (M = 3.06). Either way, both scores land near the neutral midpoint, so the overall takeaway stays the same: members don't see CU's loan rates as a clear advantage.
+
+```{r}
+#| label: h2-sensitivity
+#| code-summary: "Sensitivity check: Q8r reversed to match Q30's direction"
+cor(h2$Q8_r, h2$q30)
+t.test(6 - h2$Q8_r, h2$q30, paired = TRUE)
+```
+
+## Summary of Findings
+
+| Hypothesis | Result | Key insight |
+|---|---|---|
+| **H1** | Supported | Members who have *used* the regular share account feel CU meets their needs less (3.08) than unaware (3.63) or aware-but-not-using members (3.72). The account experience itself may be falling short. |
+| **H2** | Supported | Members rate CU's loan rate and its rate vs. competitors about the same, and both are neutral (~3.1). Members don't see CU's loan rates as a clear advantage, which is a communication opportunity. |
+
+## Appendix
+
+- **GitHub Repo:** <https://github.com/rsabilla/REPO-NAME>
+- **GitHub Pages:** <https://rsabilla.github.io/REPO-NAME/>
